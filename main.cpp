@@ -8,7 +8,7 @@
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 
 const GLchar* vertexShaderSource = R"(
-#version 330 core
+#version 460 core
 layout (location = 0) in vec3 position;
 void main()
 {
@@ -16,12 +16,18 @@ void main()
 }
 )";
 const GLchar* fragmentShaderSource = R"(
-#version 330 core
+#version 460 core
+layout(binding=0, offset=0) uniform atomic_uint ac;
 uniform vec3 uColor;
+uniform uint uCounterClamp;
 out vec4 color;
 void main()
 {
-    color = vec4(uColor, 1.0f);
+    uint counter = atomicCounterIncrement(ac);
+    if (counter < uCounterClamp)
+        color = vec4(uColor, 1.0f);
+    else
+        discard;
 }
 )";
 
@@ -89,6 +95,7 @@ int main(int argc, char * argv[]) {
 #pragma endregion Shadercompile
 
     GLint colorLoc = glGetUniformLocation(shaderProgram, "uColor");
+    GLint counterClampLoc = glGetUniformLocation(shaderProgram, "uCounterClamp");
 
     GLfloat vertices[] = {
             -0.5f, -0.5f, 0.0f,
@@ -104,6 +111,12 @@ int main(int argc, char * argv[]) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
     glEnableVertexAttribArray(0);
+
+    GLuint ac_buffer = 0;
+    glGenBuffers(1, &ac_buffer);
+    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, ac_buffer);
+    glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), NULL, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 
 #pragma region IMGUIinit
     // IMGUI init
@@ -126,9 +139,7 @@ int main(int argc, char * argv[]) {
 #pragma endregion IMGUIinit
 
     // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    static int counterValue = 0;
 
     while (!glfwWindowShouldClose(window))
     {
@@ -139,9 +150,23 @@ int main(int argc, char * argv[]) {
             int display_w, display_h;
             glfwGetFramebufferSize(window, &display_w, &display_h);
             glViewport(0, 0, display_w, display_h);
-            glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+            glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
             glClear(GL_COLOR_BUFFER_BIT);
+
+            // reset ATOMIC_COUNTER_BUFFER
+            glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, ac_buffer);
+            GLuint* ptr = (GLuint*)glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint),
+                                                    GL_MAP_WRITE_BIT |
+                                                    GL_MAP_INVALIDATE_BUFFER_BIT |
+                                                    GL_MAP_UNSYNCHRONIZED_BIT);
+            ptr[0] = 0;
+            glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
+            glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
         }
+
+        glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, ac_buffer);
+
+        glUniform1ui(counterClampLoc, counterValue);
 
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
@@ -168,40 +193,10 @@ int main(int argc, char * argv[]) {
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
-            // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-            if (show_demo_window)
-                ImGui::ShowDemoWindow(&show_demo_window);
-
-            // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
             {
-                static float f = 0.0f;
-                static int counter = 0;
-
-                ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-                ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-                ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-                ImGui::Checkbox("Another Window", &show_another_window);
-
-                ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-                ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-                if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                    counter++;
-                ImGui::SameLine();
-                ImGui::Text("counter = %d", counter);
-
+                ImGui::Begin("Debug pannel");
                 ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-                ImGui::End();
-            }
-
-            // 3. Show another simple window.
-            if (show_another_window)
-            {
-                ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-                ImGui::Text("Hello from another window!");
-                if (ImGui::Button("Close Me"))
-                    show_another_window = false;
+                ImGui::SliderInt("Counter clamp", &counterValue, 0, 900000);
                 ImGui::End();
             }
 
