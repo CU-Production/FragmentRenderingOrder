@@ -1,9 +1,9 @@
 # FragmentRenderingOrder
 Rendering Order of Fragments
 
-<video id="video" controls="" preload="none" poster="videos/Snipaste_2021-11-02_00-15-21.png">
-<source id="mp4" src="videos/20211102001053.mp4" type="video/mp4">
-</video>
+## Video
+
+videos/20211102001053.mp4
 
 # References
 
