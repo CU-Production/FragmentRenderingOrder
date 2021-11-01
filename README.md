@@ -1,9 +1,7 @@
 # FragmentRenderingOrder
 Rendering Order of Fragments
 
-## Video
-
-videos/20211102001053.mp4
+![video](videos/20211102001053.gif)
 
 # References
 
